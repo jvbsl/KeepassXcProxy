@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Sodium;
 
@@ -20,7 +21,10 @@ public class NativeMessageProxy : IDisposable
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            socketSearchPaths = [socketName + "_" + Environment.UserName];
+            var socketPath = socketName + "_" + Environment.UserName;
+            socketSearchPaths = [socketPath];
+            if (File.Exists(@$"\\.\pipe\{socketPath}"))
+                return socketPath;
         }
         else
         {
@@ -39,15 +43,15 @@ public class NativeMessageProxy : IDisposable
                                             "snap/keepassxc/common", socketName)
                                         : null
                                 }.Where(path => path != null).OfType<string>().ToArray();
-        }
-
-        foreach (var socketPath in socketSearchPaths)
-        {
-            if (File.Exists(socketPath))
+            foreach (var socketPath in socketSearchPaths)
             {
-                return socketPath;
+                if (File.Exists(socketPath))
+                {
+                    return socketPath;
+                }
             }
         }
+
 
         throw new Exception(
             $"Error: Could not find any keepassxc socket in the following locations: {string.Join(", ", socketSearchPaths)}");
@@ -226,7 +230,7 @@ public class NativeMessageProxy : IDisposable
 
 public class UnixSocketStream : Stream
 {
-    const int NativeMessageMaxLength = 1024 * 1024;
+    public const int NativeMessageMaxLength = 1024 * 1024;
     private readonly NetworkStream _streamImplementation;
 
     private bool _isFinal = false;
@@ -301,11 +305,12 @@ public class UnixSocketStream : Stream
 class WinNamedPipe : Stream
 {
     private readonly NamedPipeClientStream _pipeClient;
+    private bool _isFinal;
 
     public WinNamedPipe(string address)
     {
         _pipeClient = new NamedPipeClientStream(".", address, PipeDirection.InOut, PipeOptions.None);
-        _pipeClient.Connect();
+        _pipeClient.Connect(100);
     }
 
     public override void Close()
@@ -324,7 +329,14 @@ class WinNamedPipe : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        return _pipeClient.Read(buffer, offset, count);
+        if ( _isFinal)
+        {
+            _isFinal = false;
+            return 0;
+        }
+        var read = _pipeClient.Read(buffer, offset, count);
+        _isFinal = read < count;
+        return read;
     }
 
     public override long Seek(long offset, SeekOrigin origin)
