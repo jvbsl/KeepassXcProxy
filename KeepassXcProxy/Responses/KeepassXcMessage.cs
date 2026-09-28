@@ -22,6 +22,4 @@ public class KeepassXcMessage : KeepassXcBaseResponse
 [JsonDerivedType(typeof(KeepassXcTestAssociateResponse), KeepassXcTestAssociate.ActionName)]
 public class KeepassXcActionResponse : KeepassXcMessage
 {
-    [JsonPropertyName("action")]
-    public string Action { get; set; }
 }

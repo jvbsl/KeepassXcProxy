@@ -1,13 +1,10 @@
-using System;
-using System.IO;
 using System.IO.Pipes;
-using System.Linq;
 using System.Net.Sockets;
 using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
+
 using Sodium;
 
 namespace KeepassXcProxy;
@@ -75,14 +72,15 @@ public class NativeMessageProxy : IDisposable
 
     private readonly KeyPair _privateKeyPair;
     private byte[]? _publicKey;
-    
+    public KeepassXcAssociateKey? _association;
+
     public NativeMessageProxy()
     {
         _stream = GetSocketStream();
         _deserializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.General)
-                               {
-                                    Converters = { new JsonResponseConverter(), new JsonStringConverter<bool>(), new JsonStringConverter<int>() }
-                               };
+        {
+            Converters = { new JsonResponseConverter(), new JsonStringConverter<bool>(), new JsonStringConverter<int>() }
+        };
 
         _clientId = Convert.ToBase64String(RandomNumberGenerator.GetBytes(24));
         _privateKeyPair = PublicKeyBox.GenerateKeyPair();
@@ -112,7 +110,7 @@ public class NativeMessageProxy : IDisposable
     {
         if (nonceOutput.Length < nonce.Length)
             throw new ArgumentOutOfRangeException(nameof(nonceOutput));
-        if ((new BigInteger(nonce, true, false) + 1).TryWriteBytes(nonceOutput, out var written, true))
+        if ((new BigInteger(nonce, true, false) + value).TryWriteBytes(nonceOutput, out var written, true))
         {
             if (written < nonce.Length)
                 throw new ArgumentOutOfRangeException(nameof(nonceOutput));
@@ -159,32 +157,36 @@ public class NativeMessageProxy : IDisposable
     {
     }
 
-    public KeepassXcAssociateKey? _association;
-    public void Associate()
+    public KeepassXcAssociateKey? Associate()
     {
         var associateKey = RandomNumberGenerator.GetBytes(32);
-        var res = Send(new KeepassXcAssociate()
-                       { IdKey = associateKey, Key = _privateKeyPair.PublicKey});
+        var res = Send(new KeepassXcAssociate() { IdKey = associateKey, Key = _privateKeyPair.PublicKey });
         if (res is KeepassXcAssociateResponse associateResponse)
         {
             if (!associateResponse.Success)
                 throw new Exception();
-            _association = new KeepassXcAssociateKey() { Id = associateResponse.Id, Key = associateKey };
+            return _association = new KeepassXcAssociateKey() { Id = associateResponse.Id, Key = associateKey };
         }
         else if (res is KeepassXcErrorResponse errorResponse)
         {
             throw new Exception();
         }
+        return null;
     }
 
-    public bool TestAssociate()
+    public void Associate(KeepassXcAssociateKey associateKey)
+    {
+        _association = associateKey;
+    }
+
+    public bool TestAssociate(bool triggerUnlock = true)
     {
         if (_association is null)
         {
             return false;
         }
         var res = Send(new KeepassXcTestAssociate()
-                       { Id = _association.Id, Key = _association.Key });
+        { Id = _association.Id, Key = _association.Key }, triggerUnlock);
         if (res is KeepassXcTestAssociateResponse associateResponse)
         {
             if (!associateResponse.Success)
@@ -259,7 +261,6 @@ public class UnixSocketStream : Stream
             return 0;
         }
         _isFinal = true;
-        
         //socket.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.SendBuffer, NativeMessageMaxLength);
         return _streamImplementation.Read(buffer, offset, count);
     }
@@ -329,7 +330,7 @@ class WinNamedPipe : Stream
 
     public override int Read(byte[] buffer, int offset, int count)
     {
-        if ( _isFinal)
+        if (_isFinal)
         {
             _isFinal = false;
             return 0;

@@ -19,6 +19,6 @@ public abstract class KeepassXcAction
     [JsonPropertyName("action")]
     public string Action { get; }
     
-    [JsonPropertyName("triggerUnlock")]
-    public bool? TriggerUnlock { get; set; }
+    [JsonPropertyName("triggerUnlock"), JsonConverter(typeof(JsonStringConverter<bool>))]
+    public bool TriggerUnlock { get; set; }
 }

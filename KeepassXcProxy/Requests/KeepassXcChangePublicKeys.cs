@@ -2,25 +2,17 @@ using System.Text.Json.Serialization;
 
 namespace KeepassXcProxy;
 
-public class KeepassXcChangePublicKeys : KeepassXcAction, IActionNamed
+public class KeepassXcChangePublicKeys(byte[] publicKey, byte[] nonce, string clientId) : KeepassXcAction(ActionName), IActionNamed
 {
     static string IActionNamed.ActionName => ActionName;
     public const string ActionName = "change-public-keys";
-    
-    public KeepassXcChangePublicKeys(byte[] publicKey, byte[] nonce, string clientId)
-        : base(ActionName)
-    {
-        PublicKey = publicKey;
-        Nonce = nonce;
-        ClientId = clientId;
-    }
 
     [JsonPropertyName("publicKey")]
-    public byte[] PublicKey { get; set; }
+    public byte[] PublicKey { get; set; } = publicKey;
 
     [JsonPropertyName("nonce")]
-    public byte[] Nonce { get; set; }
+    public byte[] Nonce { get; set; } = nonce;
 
     [JsonPropertyName("clientID")]
-    public string ClientId { get; set; }
+    public string ClientId { get; set; } = clientId;
 }
