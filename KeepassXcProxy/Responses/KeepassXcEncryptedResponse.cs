@@ -14,9 +14,6 @@ namespace KeepassXcProxy;
 [JsonDerivedType(typeof(KeepassXcEncryptedResponse<KeepassXcTestAssociateResponse>), KeepassXcTestAssociate.ActionName)]
 public class KeepassXcEncryptedResponse : KeepassXcBaseResponse
 {
-    [JsonPropertyName("action")]
-    public string Action { get; set; }
-    
     [JsonPropertyName("nonce")]
     public byte[] Nonce { get; set; }
     [JsonPropertyName("message")]
@@ -32,12 +29,13 @@ public class KeepassXcEncryptedResponse : KeepassXcBaseResponse
 public class KeepassXcEncryptedResponse<T> : KeepassXcEncryptedResponse
     where T : KeepassXcMessage
 {
+    private static JsonSerializerOptions _jsonOptions = new JsonSerializerOptions(JsonSerializerDefaults.General)
+    {
+        Converters = { new JsonResponseConverter(), new JsonStringConverter<bool>(), new JsonStringConverter<int>() }
+    };
     public override T GetMessage(byte[] nonce, byte[] secretKey, byte[] publicKey)
     {
         var decrypted = PublicKeyBox.Open(Message, nonce, secretKey, publicKey);
-        return JsonSerializer.Deserialize<T>(decrypted, new JsonSerializerOptions(JsonSerializerDefaults.General)
-                                                        {
-                                                            Converters = { new JsonResponseConverter(), new JsonStringConverter<bool>(), new JsonStringConverter<int>() }
-                                                        });
+        return JsonSerializer.Deserialize<T>(decrypted, _jsonOptions);
     }
 }
